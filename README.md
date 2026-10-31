@@ -83,7 +83,12 @@ Docker Compose merges `compose.override.yaml` automatically, so `composedoctor -
 
 ## Install
 
-Requires Node.js 18.17+ and git.
+**Requirements**
+
+- Node.js 18.17 or newer
+- git (to install straight from GitHub)
+- Windows, macOS or Linux
+- Docker is **not** required: ComposeDoctor reads your files directly.
 
 ```bash
 # run once without installing
