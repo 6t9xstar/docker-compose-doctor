@@ -1,0 +1,16 @@
+name: Rule or feature request
+description: Suggest a new check or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What goes wrong in real projects today? Links to docs or issues help.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example that should be reported
+      render: text

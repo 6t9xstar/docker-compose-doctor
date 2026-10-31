@@ -1,0 +1,22 @@
+services:
+  web:
+    build: ./app
+    ports:
+      - "127.0.0.1:18080:80"
+    environment:
+      DATABASE_URL: postgres://app:${DB_PASSWORD}@db:5432/app
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 10
+volumes:
+  pgdata: {}

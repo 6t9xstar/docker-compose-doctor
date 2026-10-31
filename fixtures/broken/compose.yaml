@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  api:
+    build: ./api
+    ports:
+      - 8080:80
+    environment:
+      DATABASE_URL: postgres://app:${DB_PASSWORD}@db:5432/app
+      API_KEY:
+    env_file: .env.api
+    depends_on:
+      - db
+      - redis
+      - cache
+    volumes:
+      - ./config/app.yml:/app/config.yml
+      - uploads:/data/uploads
+    restart: sometimes
+
+  db:
+    image: postgres
+    ports:
+      - "5432:5432"
+    enviroment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+
+  worker:
+    image: myorg/worker:1.4.2
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    networks:
+      - backend

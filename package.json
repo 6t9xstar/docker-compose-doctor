@@ -1,0 +1,50 @@
+{
+  "name": "composedoctor",
+  "version": "1.0.0",
+  "description": "Docker Compose validator and troubleshooting doctor: finds missing env vars, port conflicts, missing healthchecks, broken depends_on, bad volumes and latest tags before docker compose up fails.",
+  "type": "module",
+  "bin": {
+    "composedoctor": "bin/composedoctor.js"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "action.yml"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "keywords": [
+    "docker",
+    "docker-compose",
+    "compose",
+    "validator",
+    "linter",
+    "healthcheck",
+    "depends_on",
+    "port-conflict",
+    "devops",
+    "cli",
+    "github-action",
+    "docker compose validator"
+  ],
+  "author": "6t9xstar",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/6t9xstar/docker-compose-doctor.git"
+  },
+  "homepage": "https://github.com/6t9xstar/docker-compose-doctor#readme",
+  "bugs": {
+    "url": "https://github.com/6t9xstar/docker-compose-doctor/issues"
+  }
+}

@@ -1,0 +1,56 @@
+name: 'ComposeDoctor'
+description: 'Diagnose Docker Compose files before docker compose up fails.'
+author: '6t9xstar'
+branding:
+  icon: 'package'
+  color: 'blue'
+inputs:
+  project-directory:
+    description: "Folder containing compose.yaml / docker-compose.yml"
+    required: false
+    default: "."
+  file:
+    description: "Compose file to check (optional, overrides discovery)"
+    required: false
+    default: ""
+  env-file:
+    description: "Env file used for variable interpolation (optional)"
+    required: false
+    default: ""
+  port-check:
+    description: "Check whether published ports are free on the runner"
+    required: false
+    default: "false"
+  fail-on:
+    description: "Lowest severity that fails the step: error, warning, info or none"
+    required: false
+    default: "error"
+  args:
+    description: "Extra command-line arguments"
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Install ComposeDoctor
+      shell: bash
+      run: cd "$GITHUB_ACTION_PATH" && npm ci --omit=dev --no-audit --no-fund --loglevel=error
+    - name: Run ComposeDoctor
+      shell: bash
+      env:
+        INPUT_PROJECT_DIRECTORY: ${{ inputs.project-directory }}
+        INPUT_FILE: ${{ inputs.file }}
+        INPUT_ENV_FILE: ${{ inputs.env-file }}
+        INPUT_PORT_CHECK: ${{ inputs.port-check }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_ARGS: ${{ inputs.args }}
+      run: |
+        set -euo pipefail
+        ARGS=(scan --project-directory "$INPUT_PROJECT_DIRECTORY")
+        if [ -n "$INPUT_FILE" ]; then ARGS+=(--file "$INPUT_FILE"); fi
+        if [ -n "$INPUT_ENV_FILE" ]; then ARGS+=(--env-file "$INPUT_ENV_FILE"); fi
+        if [ "$INPUT_PORT_CHECK" != "true" ]; then ARGS+=(--no-port-check); fi
+        read -r -a EXTRA <<< "$INPUT_ARGS"
+        CLI="$GITHUB_ACTION_PATH/bin/composedoctor.js"
+        node "$CLI" "${ARGS[@]}" ${EXTRA[@]+"${EXTRA[@]}"} --format markdown --fail-on none >> "$GITHUB_STEP_SUMMARY" || true
+        node "$CLI" "${ARGS[@]}" ${EXTRA[@]+"${EXTRA[@]}"} --format github --fail-on "$INPUT_FAIL_ON"

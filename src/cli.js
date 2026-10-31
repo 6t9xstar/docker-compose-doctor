@@ -1,0 +1,158 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { parseArgs } from 'node:util';
+import { createRequire } from 'node:module';
+import { discoverFiles, loadProject } from './load.js';
+import { diagnose, RULES } from './rules.js';
+import { buildFixPreview } from './fix.js';
+import * as R from './reporters.js';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../package.json');
+const TOOL = { name: 'ComposeDoctor', version: pkg.version, uri: 'https://github.com/6t9xstar/docker-compose-doctor' };
+
+const HELP = `ComposeDoctor ${pkg.version} - Docker Compose validator and startup doctor
+
+Usage
+  composedoctor scan [options]          Diagnose the compose project (default command)
+  composedoctor scan --fix-preview      Also print a compose.override.yaml that fixes readiness issues
+  composedoctor rules                   List all rules
+
+Options
+  -f, --file <path>            Compose file (repeatable, like docker compose -f)
+      --project-directory <d>  Directory to search for compose files (default: .)
+      --env-file <path>        Env file for interpolation (repeatable, default: .env)
+      --ignore-shell-env       Resolve variables from env files only (like a clean CI runner)
+      --no-port-check          Skip checking whether published ports are free locally
+      --fix-preview            Print suggested fixes as a compose override file
+      --write-override <file>  Write the suggested fixes to <file> (e.g. compose.override.yaml)
+      --format <fmt>           text | json | sarif | markdown | github   (default: text)
+  -o, --output <file>          Write the report to a file
+      --fail-on <level>        error | warning | info | none             (default: error)
+      --ignore <ids>           Comma-separated rule ids to skip, e.g. CD003,CD042
+      --no-color               Disable colors
+  -h, --help / -v, --version
+
+Exit codes: 0 = ok, 1 = findings at or above --fail-on, 2 = usage error
+
+Docs: ${TOOL.uri}`;
+
+export async function main(argv) {
+  let parsed;
+  try {
+    parsed = parseArgs({
+      args: argv,
+      allowPositionals: true,
+      options: {
+        file: { type: 'string', short: 'f', multiple: true },
+        'project-directory': { type: 'string' },
+        'env-file': { type: 'string', multiple: true },
+        'ignore-shell-env': { type: 'boolean' },
+        'no-port-check': { type: 'boolean' },
+        'fix-preview': { type: 'boolean' },
+        'write-override': { type: 'string' },
+        format: { type: 'string', default: 'text' },
+        output: { type: 'string', short: 'o' },
+        'fail-on': { type: 'string', default: 'error' },
+        ignore: { type: 'string', default: '' },
+        'no-color': { type: 'boolean' },
+        help: { type: 'boolean', short: 'h' },
+        version: { type: 'boolean', short: 'v' },
+      },
+    });
+  } catch (err) {
+    console.error(`composedoctor: ${err.message}\nRun "composedoctor --help" for usage.`);
+    return 2;
+  }
+  const { values: opts, positionals } = parsed;
+  if (opts.version) return print(pkg.version), 0;
+  if (opts.help) return print(HELP), 0;
+  const command = positionals[0] || 'scan';
+  if (!['scan', 'rules'].includes(command)) return usage(`Unknown command "${command}"`);
+  if (!R.FORMATS.includes(opts.format)) return usage(`Unknown format "${opts.format}"`);
+  if (!['error', 'warning', 'info', 'none'].includes(opts['fail-on'])) return usage(`Unknown --fail-on level "${opts['fail-on']}"`);
+  const c = R.colors(R.shouldUseColor(opts['no-color'] ? false : undefined));
+
+  if (command === 'rules') {
+    for (const [id, r] of Object.entries(RULES)) print(`${c.bold(id)} ${r.name} ${c.gray(`(${r.severity})`)}\n    ${r.description}`);
+    return 0;
+  }
+
+  const projectDir = path.resolve(opts['project-directory'] || '.');
+  let files;
+  if (opts.file?.length) {
+    files = opts.file.map((f) => path.resolve(f));
+    const missing = files.find((f) => !fs.existsSync(f));
+    if (missing) return usage(`Compose file not found: ${missing}`);
+  } else {
+    files = discoverFiles(projectDir);
+    if (!files.length) return usage(`No compose.yaml / docker-compose.yml found in ${projectDir}`);
+  }
+
+  const project = loadProject(files, {
+    projectDir: opts['project-directory'] ? projectDir : path.dirname(files[0]),
+    envFiles: (opts['env-file'] || []).map((f) => path.resolve(f)),
+    useShellEnv: !opts['ignore-shell-env'],
+  });
+  const ignore = new Set(opts.ignore.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean));
+  const findings = await diagnose(project, { checkPorts: !opts['no-port-check'], ignore });
+
+  const fix = opts['fix-preview'] || opts['write-override'] ? buildFixPreview(project.model) : null;
+  if (opts['write-override'] && fix.yaml) {
+    const target = path.resolve(opts['write-override']);
+    if (fs.existsSync(target)) return usage(`${opts['write-override']} already exists; refusing to overwrite it`);
+    fs.writeFileSync(target, `# Generated by ComposeDoctor ${pkg.version}. Review before committing.\n${fix.yaml}`);
+  }
+
+  const out = render(findings, project, opts.format, c, fix, opts['write-override']);
+  if (opts.output) fs.writeFileSync(opts.output, out + '\n');
+  else print(out);
+
+  return findings.some((f) => opts['fail-on'] !== 'none' && R.atLeast(f.severity, opts['fail-on'])) ? 1 : 0;
+}
+
+function render(findings, project, format, c, fix, overridePath) {
+  const files = project.files.map((f) => path.relative(process.cwd(), f).split(path.sep).join('/'));
+  switch (format) {
+    case 'json':
+      return R.renderJson(findings, { tool: TOOL, extra: { files, services: Object.keys(project.model.services || {}), fixPreview: fix?.yaml || undefined } });
+    case 'sarif':
+      return R.renderSarif(findings, { tool: TOOL, rules: RULES });
+    case 'markdown':
+      return R.renderMarkdown(findings, { tool: TOOL, title: 'ComposeDoctor Report' }) + (fix?.yaml ? `\n\n### Suggested compose.override.yaml\n\n\`\`\`yaml\n${fix.yaml}\`\`\`` : '');
+    case 'github':
+      return R.renderGithub(findings) || '::notice title=ComposeDoctor::No issues found';
+  }
+
+  const lines = [c.bold('COMPOSE DOCTOR'), c.gray(`${files.join(', ')} · ${Object.keys(project.model.services || {}).length} services`), ''];
+  for (const f of R.sortFindings(findings)) {
+    lines.push(`${R.severityLabel(f.severity, c)} ${f.context ? c.bold(f.context) + ' ' : ''}${f.message}`);
+    lines.push(c.gray(`          ${f.ruleId} ${f.file}:${f.line}`) + (f.fix ? `  ${c.cyan('Fix:')} ${f.fix.replace(/\n/g, ' ')}` : ''));
+  }
+  const s = R.countBySeverity(findings);
+  lines.push('');
+  lines.push(findings.length ? `${findings.length} findings detected (${s.error} errors, ${s.warning} warnings, ${s.info} info).` : c.green('✔ No issues found.'));
+
+  if (fix) {
+    lines.push('', c.bold('FIX PREVIEW'));
+    if (fix.yaml) {
+      lines.push(c.gray(overridePath ? `Written to ${overridePath}:` : '# Save as compose.override.yaml (Compose merges it automatically) or copy into your compose file:'));
+      lines.push(c.green(fix.yaml.trimEnd()));
+    } else {
+      lines.push(c.gray('No automatic readiness fixes needed.'));
+    }
+    for (const n of fix.notes) lines.push(c.yellow(`- ${n}`));
+  } else if (findings.some((f) => ['CD032', 'CD033', 'CD034'].includes(f.ruleId))) {
+    lines.push(c.cyan('Run with --fix-preview to generate healthchecks and depends_on conditions.'));
+  }
+  return lines.join('\n');
+}
+
+function usage(message) {
+  console.error(`composedoctor: ${message}\nRun "composedoctor --help" for usage.`);
+  return 2;
+}
+
+function print(s) {
+  process.stdout.write(s + '\n');
+}
