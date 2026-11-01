@@ -195,11 +195,16 @@ Another container or local process is using that host port. ComposeDoctor checks
 
 ## More developer tools
 
-- [ScriptPort](https://github.com/6t9xstar/npm-scripts-cross-platform-checker): cross-platform npm scripts checker
-- [ComposeDoctor](https://github.com/6t9xstar/docker-compose-doctor): Docker Compose validator and troubleshooter
+- [WorkflowTriggerDoctor](https://github.com/6t9xstar/workflow-trigger-doctor): why a GitHub Actions workflow did not run
+- [PackageProof](https://github.com/6t9xstar/packageproof): detect hallucinated and non-existent npm and PyPI packages
+- [PaginationProbe](https://github.com/6t9xstar/pagination-probe): REST API pagination tester
+- [GitHookDoctor](https://github.com/6t9xstar/git-hook-doctor): Git hooks, Husky, Lefthook and pre-commit troubleshooter
+- [NpmTarballAudit](https://github.com/6t9xstar/npm-tarball-audit): npm package contents and secrets auditor
 - [CachePilot](https://github.com/6t9xstar/github-actions-cache-optimizer): GitHub Actions cache analyzer and optimizer
+- [ComposeDoctor](https://github.com/6t9xstar/docker-compose-doctor): Docker Compose validator and troubleshooter
 - [DevContainer Doctor](https://github.com/6t9xstar/devcontainer-json-validator): devcontainer.json validator
 - [OwnerScope](https://github.com/6t9xstar/codeowners-coverage-checker): CODEOWNERS validator and coverage checker
+- [ScriptPort](https://github.com/6t9xstar/npm-scripts-cross-platform-checker): cross-platform npm scripts checker
 
 ## License
 
